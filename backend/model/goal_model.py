@@ -1,14 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 class GoalCreate(BaseModel):
-    title: str
-    target_amount: float
-    current_amount: float = 0.0
-    deadline: Optional[str] = None
+    title: str = Field(min_length=1, max_length=100)
+    target_amount: float = Field(gt=0)
+    current_amount: float = Field(default=0.0, ge=0)
+    deadline: Optional[str] = Field(default=None, max_length=20)
 
 class GoalUpdate(BaseModel):
-    title: Optional[str] = None
-    target_amount: Optional[float] = None
-    current_amount: Optional[float] = None
-    deadline: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    target_amount: Optional[float] = Field(default=None, gt=0)
+    current_amount: Optional[float] = Field(default=None, ge=0)
+    deadline: Optional[str] = Field(default=None, max_length=20)

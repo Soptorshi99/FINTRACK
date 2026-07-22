@@ -6,7 +6,7 @@ from bson import ObjectId
 from datetime import datetime
 from pydantic import BaseModel
 from database import transactions_collection, budgets_collection, goals_collection
-from dependencies import get_current_user
+from dependencies import get_current_user, rate_limit_ai
 
 router = APIRouter()
 
@@ -40,7 +40,7 @@ def get_month_prefix_and_name(query_lower: str):
     name = f"{month_names[month - 1]} {year}"
     return prefix, name
 
-@router.post("/ai/chat")
+@router.post("/ai/chat", dependencies=[Depends(rate_limit_ai)])
 async def ai_chat(
     request: ChatRequest,
     current_user=Depends(get_current_user)

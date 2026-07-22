@@ -3,7 +3,7 @@ from datetime import datetime
 from bson import ObjectId
 
 from database import goals_collection
-from dependencies import get_current_user
+from dependencies import get_current_user, log_audit_action
 from model.goal_model import GoalCreate, GoalUpdate
 
 router = APIRouter(
@@ -26,6 +26,8 @@ async def create_goal(
     }
 
     result = await goals_collection.insert_one(goal_data)
+
+    await log_audit_action(user["_id"], "create_goal", {"goal_id": str(result.inserted_id), "title": goal.title})
 
     return {
         "message": "Goal created successfully",
@@ -73,9 +75,11 @@ async def update_goal(
         return {"message": "No changes made"}
 
     await goals_collection.update_one(
-        {"_id": ObjectId(goal_id)},
+        {"_id": ObjectId(goal_id), "user_id": user["_id"]},
         {"$set": update_data}
     )
+
+    await log_audit_action(user["_id"], "update_goal", {"goal_id": goal_id})
 
     return {"message": "Goal updated successfully"}
 
@@ -100,5 +104,7 @@ async def delete_goal(
             status_code=404,
             detail="Goal not found"
         )
+
+    await log_audit_action(user["_id"], "delete_goal", {"goal_id": goal_id})
 
     return {"message": "Goal deleted successfully"}

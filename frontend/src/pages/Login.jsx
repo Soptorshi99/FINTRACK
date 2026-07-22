@@ -7,37 +7,31 @@ function Login() {
     const navigate =
     useNavigate();
     const handleLogin = async () => {
+        try {
+            const response = await api.post("/auth/login", {
+                email,
+                password
+            });
+            const token = response.data.access_token;
+            localStorage.setItem("token", token);
 
-    try {
+            // Fetch current user info to check role
+            const meRes = await api.get("/auth/me", {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const role = meRes.data?.role || "user";
+            localStorage.setItem("role", role);
 
-        const response =
-            await api.post(
-                "/auth/login",
-                {
-                    email,
-                    password
-                }
-            );
-        console.log(response.data);
-        localStorage.setItem(
-            "token",
-            response.data.access_token
-        );
-
-        window.location.href =
-    "/dashboard";
-
-    } catch (error) {
-
-        alert(
-            "Invalid credentials"
-        );
-
-        console.error(error);
-
-    }
-
-};
+            if (role === "admin") {
+                window.location.href = "/admin";
+            } else {
+                window.location.href = "/dashboard";
+            }
+        } catch (error) {
+            alert(error.response?.data?.detail || "Invalid credentials");
+            console.error(error);
+        }
+    };
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 

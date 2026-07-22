@@ -5,8 +5,19 @@ import ExpenseChart from "../components/ExpenseChart";
 import MonthlyTrendChart from "../components/MonthlyTrendChart";
 import Budgets from "../components/Budgets";
 import SavingsGoals from "../components/SavingsGoals";
+import RecurringTransactions from "../components/RecurringTransactions";
+import BillReminders from "../components/BillReminders";
+import InvestmentPortfolio from "../components/InvestmentPortfolio";
+import LoanManager from "../components/LoanManager";
+import AccountManager from "../components/AccountManager";
+import NetWorthTracker from "../components/NetWorthTracker";
+import ReceiptScanner from "../components/ReceiptScanner";
+import VoiceExpense from "../components/VoiceExpense";
+import SpendingForecast from "../components/SpendingForecast";
 import AddTransaction from "../components/AddTransaction";
 import AiAssistant from "../components/AiAssistant";
+import FinancialChallenges from "../components/FinancialChallenges";
+import FamilyBudget from "../components/FamilyBudget";
 
 const formatCurrency = (value) =>
     new Intl.NumberFormat("en-IN", {
@@ -20,10 +31,13 @@ function Dashboard() {
     const [transactions, setTransactions] = useState([]);
     const [budgets, setBudgets] = useState([]);
     const [goals, setGoals] = useState([]);
+    const [bills, setBills] = useState([]);
     
     // Shared refresh key to sync Budgets/Goals components when transactions update
     const [refreshKey, setRefreshKey] = useState(0);
     const [editingTransaction, setEditingTransaction] = useState(null);
+    const [activeView, setActiveView] = useState("overview");
+    const [accountRefreshKey, setAccountRefreshKey] = useState(0);
 
     // Filters & Search states
     const [selectedMonth, setSelectedMonth] = useState("All");
@@ -95,8 +109,21 @@ function Dashboard() {
             }
         });
 
+        bills.forEach((bill) => {
+            if (bill.is_paid) return;
+            const dueDate = new Date(`${bill.due_date}T00:00:00`);
+            const daysUntilDue = Math.ceil(
+                (dueDate - new Date(today.toDateString())) / 86400000
+            );
+            if (daysUntilDue < 0) {
+                list.push(`Bill overdue: ${bill.title}.`);
+            } else if (daysUntilDue <= 3) {
+                list.push(`${bill.title} is due ${daysUntilDue === 0 ? "today" : `in ${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"}`}.`);
+            }
+        });
+
         return list;
-    }, [budgets, goals]);
+    }, [budgets, goals, bills]);
 
     const token = localStorage.getItem("token");
 
@@ -122,11 +149,21 @@ function Dashboard() {
     // Fetch transactions
     const fetchTransactions = useCallback(async () => {
         try {
+            await api.post("/recurring-transactions/process", {}, authConfig);
             const response = await api.get("/transactions", authConfig);
             setTransactions(response.data);
             setRefreshKey((k) => k + 1);
         } catch (error) {
             console.error("Failed to fetch transactions:", error);
+        }
+    }, [authConfig]);
+
+    const fetchBills = useCallback(async () => {
+        try {
+            const response = await api.get("/bill-reminders", authConfig);
+            setBills(response.data);
+        } catch (error) {
+            console.error("Failed to fetch bill reminders:", error);
         }
     }, [authConfig]);
 
@@ -155,7 +192,13 @@ function Dashboard() {
         fetchTransactions();
         fetchBudgets();
         fetchGoals();
-    }, [fetchTransactions, fetchBudgets, fetchGoals]);
+        fetchBills();
+    }, [fetchTransactions, fetchBudgets, fetchGoals, fetchBills]);
+
+    const handleAccountsChanged = useCallback(() => {
+        setAccountRefreshKey((key) => key + 1);
+        refreshAll();
+    }, [refreshAll]);
 
     useEffect(() => {
         fetchUser();
@@ -337,13 +380,39 @@ function Dashboard() {
                         Here is a premium breakdown of your financial metrics, budgets, and savings goals.
                     </p>
                 </div>
-                <button
-                    onClick={handleLogout}
-                    className="px-5 py-2.5 bg-rose-950/40 border border-rose-900/35 hover:bg-rose-900 text-rose-300 hover:text-white rounded-xl font-bold transition shadow-lg shadow-rose-900/20"
-                >
-                    Logout
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleLogout}
+                        className="px-5 py-2.5 bg-rose-950/40 border border-rose-900/35 hover:bg-rose-900 text-rose-300 hover:text-white rounded-xl font-bold transition shadow-lg shadow-rose-900/20"
+                    >
+                        Logout
+                    </button>
+                </div>
             </header>
+
+            <nav className="flex gap-2 overflow-x-auto border-b border-slate-800 pb-3" aria-label="Dashboard sections">
+                {[
+                    ["overview", "Overview"],
+                    ["planning", "Planning"],
+                    ["automation", "Automation"],
+                    ["wealth", "Wealth"],
+                    ["insights", "Insights"],
+                    ["challenges", "Challenges 🎮"],
+                    ["family", "Family Budget 👨‍👩‍👧"],
+                ].map(([view, label]) => (
+                    <button
+                        key={view}
+                        onClick={() => setActiveView(view)}
+                        className={
+                            activeView === view
+                                ? "shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
+                                : "shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-400 hover:bg-slate-800 hover:text-white"
+                        }
+                    >
+                        {label}
+                    </button>
+                ))}
+            </nav>
 
             {/* Notifications Center Panel */}
             {notifications.length > 0 && (
@@ -367,31 +436,73 @@ function Dashboard() {
             )}
 
             {/* Row 1: Summary cards (Balance, Income, Expense, Health Score) */}
-            <SummaryCards
-                transactions={transactions}
-                budgets={budgets}
-                goals={goals}
-            />
+            {activeView === "overview" && <>
+                <SummaryCards
+                    transactions={transactions}
+                    budgets={budgets}
+                    goals={goals}
+                />
 
             {/* Row 2: Charts (Expense Breakdown & Trend with summary) */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <ExpenseChart transactions={transactions} />
-                <MonthlyTrendChart transactions={transactions} />
-            </div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    <ExpenseChart transactions={transactions} />
+                    <MonthlyTrendChart transactions={transactions} />
+                </div>
+            </>}
 
             {/* Row 3: Budgets & Goals side-by-side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {activeView === "planning" && <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Budgets refreshKey={refreshKey} />
                 <SavingsGoals refreshKey={refreshKey} />
-            </div>
+            </div>}
+
+            {activeView === "automation" && <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <RecurringTransactions
+                    refreshKey={refreshKey}
+                    onTransactionsChanged={refreshAll}
+                    accountRefreshKey={accountRefreshKey}
+                />
+                <BillReminders
+                    refreshKey={refreshKey}
+                    onBillsChanged={setBills}
+                />
+            </div>}
+
+            {activeView === "wealth" && <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <InvestmentPortfolio />
+                <LoanManager />
+            </div>}
+
+            {activeView === "insights" && <div className="space-y-8">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    <NetWorthTracker refreshKey={refreshKey} />
+                    <SpendingForecast refreshKey={refreshKey} />
+                </div>
+                <AccountManager onAccountsChanged={handleAccountsChanged} />
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    <ReceiptScanner
+                        accountRefreshKey={accountRefreshKey}
+                        onAdded={refreshAll}
+                    />
+                    <VoiceExpense
+                        accountRefreshKey={accountRefreshKey}
+                        onAdded={refreshAll}
+                    />
+                </div>
+            </div>}
+
+            {activeView === "challenges" && <FinancialChallenges />}
+
+            {activeView === "family" && <FamilyBudget />}
 
             {/* Row 4: Add Transaction & Recent Transactions */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {activeView === "overview" && <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-1 space-y-8">
                     <AddTransaction
                         refresh={refreshAll}
                         editingTransaction={editingTransaction}
                         setEditingTransaction={setEditingTransaction}
+                        accountRefreshKey={accountRefreshKey}
                     />
 
                     {/* Module 9 – Export Reports */}
@@ -557,7 +668,7 @@ function Dashboard() {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div>}
 
             {/* Floating AI Assistant */}
             <AiAssistant />

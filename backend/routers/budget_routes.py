@@ -3,7 +3,7 @@ from datetime import datetime
 from bson import ObjectId
 
 from database import budgets_collection, transactions_collection
-from dependencies import get_current_user
+from dependencies import get_current_user, log_audit_action
 from model.budget_model import BudgetCreate
 
 router = APIRouter(
@@ -50,6 +50,8 @@ async def create_budget(
             )
         )["_id"]
     )
+
+    await log_audit_action(user["_id"], "save_budget", {"category": budget.category, "amount": budget.amount, "month": budget.month})
 
     return {
         "message": "Budget saved",
@@ -141,6 +143,8 @@ async def delete_budget(
             status_code=404,
             detail="Budget not found"
         )
+
+    await log_audit_action(user["_id"], "delete_budget", {"budget_id": budget_id})
 
     return {
         "message":
