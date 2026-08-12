@@ -59,16 +59,14 @@ async def register(user: UserRegister):
             "email": user.email,
             "password_hash": hashed,
             "role": "user",
-            "is_verified": False,
-            "verification_token": verification_token,
+            "is_verified": True,
+            "verification_token": None,
             "created_at": datetime.utcnow()
         }
     )
 
-    send_verification_email(user.email, verification_token)
-
     return {
-        "message": "User created. Verification email sent.",
+        "message": "User created successfully.",
         "user_id": str(result.inserted_id)
     }
 
@@ -92,12 +90,6 @@ async def login(user: UserLogin):
         raise HTTPException(
             401,
             "Invalid credentials"
-        )
-
-    if EMAIL_VERIFICATION_REQUIRED and not db_user.get("is_verified", False):
-        raise HTTPException(
-            status_code=403,
-            detail="Email address must be verified before logging in."
         )
 
     access_token = create_access_token(
